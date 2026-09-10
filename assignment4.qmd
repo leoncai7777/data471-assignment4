@@ -1,0 +1,174 @@
+---
+title: "Assignment 4"
+subtitle: "DATA301/DATA471"
+author: "Leon Cai"
+date: today
+format:
+  pdf:
+    pdf-engine: lualatex
+    number-sections: true
+    toc: false
+geometry:
+  - margin=25mm
+bibliography: references.bib
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(ggplot2)
+library(fpp2)
+set.seed(471)
+```
+
+# Exercise 1
+
+We have i.i.d. samples $\mathbf{X}=(X_1,\dots,X_n)$ from an Exponential distribution
+with rate $\lambda>0$ (so $\lambda$ is the reciprocal of the mean). We compare three
+estimators of $\lambda$: the maximum likelihood estimator $\hat\lambda_{ML}$, the
+inter-quartile-range estimator $\hat\lambda_{IQR}$, and a bootstrap bias-corrected
+version of the latter, $\tilde\lambda$.
+
+::: {.callout-note}
+The assignment PDF prints $\hat\lambda_{ML}(\mathbf{X}) = \tfrac1n\sum_i X_i$, which is
+just the sample mean $\bar X$ (an estimator of $1/\lambda$, not of $\lambda$). Since the
+question statement itself defines $\lambda$ as "the reciprocal of the mean," and the
+true MLE of the rate of an Exponential distribution is $\hat\lambda_{ML}=1/\bar X$, we
+treat this as a typo in the brief and use $\hat\lambda_{ML}(\mathbf{X}) = 1/\bar X =
+n / \sum_i X_i$ throughout.
+:::
+
+## Order statistics for the quartiles [10%]
+
+TODO: summary of @wicklin2017 and @hyndman1996 — discrete (type 1-3) vs
+interpolation-based (type 4-9) definitions, H&F's recommendation of type 8, and the
+default types used by R (`quantile()`, type 7) and Python (`numpy.percentile`,
+`method="linear"`, equivalent to type 7).
+
+```{r q1-defaults}
+quantile(1:10)                              # uses R's default type
+identical(quantile(1:10), quantile(1:10, type = 7)) # confirms default = type 7
+```
+
+## Bootstrap bias-corrected estimator [20%]
+
+**Derivation.** For a fixed sample $\mathbf{X}$ of size $n$, draw $B$ bootstrap
+resamples $\mathbf{X}^*_1,\dots,\mathbf{X}^*_B$ (sampling $n$ values from $\mathbf X$
+with replacement). The bootstrap estimate of the bias of $\hat\lambda_{IQR}$ is
+
+$$\widehat{\mathrm{bias}} = \frac{1}{B}\sum_{b=1}^B \hat\lambda_{IQR}(\mathbf{X}_b^*) - \hat\lambda_{IQR}(\mathbf{X}).$$
+
+The first-order bias-corrected estimator subtracts this estimated bias:
+
+$$\tilde\lambda(\mathbf{X}) = \hat\lambda_{IQR}(\mathbf{X}) - \widehat{\mathrm{bias}} = 2\hat\lambda_{IQR}(\mathbf{X}) - \frac{1}{B}\sum_{b=1}^B \hat\lambda_{IQR}(\mathbf{X}_b^*).$$
+
+```{r estimators}
+lambda_ml <- function(x) 1 / mean(x)
+
+lambda_iqr <- function(x, type = 8) {
+  q <- quantile(x, probs = c(0.25, 0.75), type = type)
+  log(3) / (q[[2]] - q[[1]])
+}
+
+lambda_tilde <- function(x, B = 200, type = 8) {
+  n <- length(x)
+  boot_est <- replicate(B, lambda_iqr(sample(x, n, replace = TRUE), type = type))
+  # For very small n, a bootstrap resample can tie at the quartiles (q3 = q1),
+  # making lambda_iqr(.) = Inf; we drop these degenerate resamples from the
+  # bootstrap average rather than let a single Inf dominate the correction.
+  boot_est <- boot_est[is.finite(boot_est)]
+  2 * lambda_iqr(x, type = type) - mean(boot_est)
+}
+```
+
+```{r estimators-demo}
+x <- rexp(30, rate = 2)
+c(ML = lambda_ml(x), IQR = lambda_iqr(x), bias_corrected = lambda_tilde(x))
+```
+
+## Monte Carlo comparison [20%]
+
+TODO: justify the number of Monte Carlo replications per $(\lambda, n)$ cell using
+the CLT-based precision argument in @robert2009 (Ch. 3): the standard error of a
+Monte Carlo estimate of $\mathrm{MSE}$ is $\sqrt{\widehat{\mathrm{Var}}/R}$, so $R$
+is chosen so this is small relative to the MSE values being compared. Smaller $n$
+and more extreme $\lambda$ give higher-variance estimators and need larger $R$.
+
+```{r mc-experiment}
+mc_mse <- function(lambda, n, R, B = 200, type = 8) {
+  est <- matrix(NA_real_, nrow = R, ncol = 3,
+                dimnames = list(NULL, c("ML", "IQR", "bias_corrected")))
+  for (r in seq_len(R)) {
+    x <- rexp(n, rate = lambda)
+    est[r, ] <- c(lambda_ml(x), lambda_iqr(x, type = type), lambda_tilde(x, B = B, type = type))
+  }
+  colMeans((est - lambda)^2)
+}
+
+lambda_grid <- c(0.1, 1, 10)
+n_grid <- c(5, 30, 100)
+R_grid <- c(`5` = 3000, `30` = 1500, `100` = 800)
+
+results <- do.call(rbind, lapply(lambda_grid, function(lam) {
+  do.call(rbind, lapply(n_grid, function(n) {
+    mse <- mc_mse(lam, n, R = R_grid[[as.character(n)]])
+    data.frame(lambda = lam, n = n, R = R_grid[[as.character(n)]],
+               t(mse), check.names = FALSE)
+  }))
+}))
+results
+```
+
+TODO: discuss the table above (which estimator wins in each corner of the design,
+whether the bias correction actually helps $\hat\lambda_{IQR}$, small-$n$ vs large-$n$
+behaviour).
+
+# Exercise 2
+
+```{r ausbeer}
+autoplot(ausbeer) + labs(title = "Quarterly Australian beer production", y = "Megalitres")
+```
+
+## Frequency
+
+TODO
+
+## Trend
+
+TODO
+
+## Seasonality
+
+TODO
+
+## Variance stability
+
+TODO
+
+## Unusual observations
+
+TODO
+
+```{r ausbeer-season}
+ggseasonplot(ausbeer)
+```
+
+## Seasonal plot
+
+TODO
+
+```{r ausbeer-subseries}
+ggsubseriesplot(ausbeer)
+```
+
+## Seasonal subseries plot
+
+TODO
+
+## Detrend / transform?
+
+TODO
+
+# References
