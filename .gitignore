@@ -6,6 +6,7 @@ references/
 /.quarto/
 *_files/
 *_cache/
+*.rmarkdown
 
 # R
 .Rproj.user/

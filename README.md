@@ -14,4 +14,4 @@ Quarto source for Assignment 4 (Alejandro C. Frery).
 quarto render assignment4.qmd
 ```
 
-Requires R with the `fpp2`, `ggplot2`, and `tsibble` packages installed.
+Requires R with the `fpp2` and `ggplot2` packages installed.

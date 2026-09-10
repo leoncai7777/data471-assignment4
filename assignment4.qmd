@@ -1,15 +1,35 @@
 ---
-title: "Assignment 4"
-subtitle: "DATA301/DATA471"
-author: "Leon Cai"
-date: today
+title-meta: "DATA301-DATA471: Data Science in Practice -- Assignment 4"
+author-meta: "Leon Cai"
 format:
   pdf:
+    documentclass: article
+    classoption: [11pt, a4paper]
     pdf-engine: lualatex
+    geometry: margin=2.5cm
     number-sections: true
     toc: false
-geometry:
-  - margin=25mm
+    colorlinks: true
+    linkcolor: blue
+    citecolor: blue
+    urlcolor: blue
+    fig-pos: "H"
+    include-in-header:
+      text: |
+        \usepackage{parskip}
+        \usepackage{microtype}
+        \setlength{\emergencystretch}{3em}
+        \usepackage{enumitem}
+        \setlist[enumerate]{leftmargin=1.8em, itemsep=0.25em}
+        \setlist[itemize]{leftmargin=1.4em, itemsep=0.25em}
+    include-before-body:
+      text: |
+        \title{\textbf{DATA301-DATA471: Data Science in Practice}\\[0.3em]
+        \large Assignment 4}
+        \author{Leon Cai (300692424)}
+        \date{Victoria University of Wellington \\ September 2026}
+        \maketitle
+        \vspace{-1em}
 bibliography: references.bib
 execute:
   echo: true
@@ -18,6 +38,7 @@ execute:
 ---
 
 ```{r setup}
+#| include: false
 library(ggplot2)
 library(fpp2)
 set.seed(471)
@@ -31,14 +52,12 @@ estimators of $\lambda$: the maximum likelihood estimator $\hat\lambda_{ML}$, th
 inter-quartile-range estimator $\hat\lambda_{IQR}$, and a bootstrap bias-corrected
 version of the latter, $\tilde\lambda$.
 
-::: {.callout-note}
-The assignment PDF prints $\hat\lambda_{ML}(\mathbf{X}) = \tfrac1n\sum_i X_i$, which is
+**Note.** The assignment PDF prints $\hat\lambda_{ML}(\mathbf{X}) = \tfrac1n\sum_i X_i$, which is
 just the sample mean $\bar X$ (an estimator of $1/\lambda$, not of $\lambda$). Since the
 question statement itself defines $\lambda$ as "the reciprocal of the mean," and the
 true MLE of the rate of an Exponential distribution is $\hat\lambda_{ML}=1/\bar X$, we
 treat this as a typo in the brief and use $\hat\lambda_{ML}(\mathbf{X}) = 1/\bar X =
 n / \sum_i X_i$ throughout.
-:::
 
 ## Order statistics for the quartiles [10%]
 
@@ -97,6 +116,7 @@ is chosen so this is small relative to the MSE values being compared. Smaller $n
 and more extreme $\lambda$ give higher-variance estimators and need larger $R$.
 
 ```{r mc-experiment}
+#| cache: true
 mc_mse <- function(lambda, n, R, B = 200, type = 8) {
   est <- matrix(NA_real_, nrow = R, ncol = 3,
                 dimnames = list(NULL, c("ML", "IQR", "bias_corrected")))
