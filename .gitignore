@@ -1,0 +1,17 @@
+# course-provided / copyrighted reference material — not part of the submission
+references/
+2026-Assignment-4.pdf
+
+# Quarto build artifacts
+/.quarto/
+*_files/
+*_cache/
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# OS
+.DS_Store
