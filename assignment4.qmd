@@ -46,25 +46,58 @@ set.seed(471)
 
 # Exercise 1
 
-We have i.i.d. samples $\mathbf{X}=(X_1,\dots,X_n)$ from an Exponential distribution
-with rate $\lambda>0$ (so $\lambda$ is the reciprocal of the mean). We compare three
-estimators of $\lambda$: the maximum likelihood estimator $\hat\lambda_{ML}$, the
-inter-quartile-range estimator $\hat\lambda_{IQR}$, and a bootstrap bias-corrected
-version of the latter, $\tilde\lambda$.
-
-**Note.** The assignment PDF prints $\hat\lambda_{ML}(\mathbf{X}) = \tfrac1n\sum_i X_i$, which is
-just the sample mean $\bar X$ (an estimator of $1/\lambda$, not of $\lambda$). Since the
-question statement itself defines $\lambda$ as "the reciprocal of the mean," and the
-true MLE of the rate of an Exponential distribution is $\hat\lambda_{ML}=1/\bar X$, we
-treat this as a typo in the brief and use $\hat\lambda_{ML}(\mathbf{X}) = 1/\bar X =
-n / \sum_i X_i$ throughout.
-
 ## Order statistics for the quartiles [10%]
 
-TODO: summary of @wicklin2017 and @hyndman1996 — discrete (type 1-3) vs
-interpolation-based (type 4-9) definitions, H&F's recommendation of type 8, and the
-default types used by R (`quantile()`, type 7) and Python (`numpy.percentile`,
-`method="linear"`, equivalent to type 7).
+**Summary of the two articles.** Nine common definitions of the sample
+quantile are compared in @wicklin2017, and they all follow the same
+general form given in @hyndman1996 (H&F): $\hat Q(p) = (1-\gamma)x_{(j)} +
+\gamma x_{(j+1)}$, where $x_{(j)}$ and $x_{(j+1)}$ are the order statistics
+closest to $p$ and $\gamma$ is an interpolation weight, with $j$ and
+$\gamma$ both depending on $p$, the sample size $n$, and a parameter $m$
+that is different for each definition ($j=\lfloor np+m\rfloor$).
+
+The nine definitions split into two groups. Types 1-3 are discontinuous,
+meaning they jump between values instead of changing smoothly, since they
+come directly from the empirical CDF, and they always give a value that
+already appears in the data (or the average of two adjacent values) --
+this group is plotted as a staircase in @wicklin2017. Types 4-9 are continuous and
+interpolate between order statistics using a *plotting position* $p_k$,
+the probability assigned to order statistic $x_{(k)}$, and these six types
+split further by how $p_k$ is derived: types 6, 7 and 8 use a
+*distribution-free* rule ($p_k$ does not depend on the population
+distribution $F$), while type 9 is built to be almost unbiased only for
+QQ-plots against a Normal distribution, so it depends on $F$ instead.
+
+Each definition is also checked in @hyndman1996 against six properties a
+good sample quantile should have (continuity in $p$, symmetry in the
+tails, uniqueness, and matching the usual sample median at $p=0.5$), and
+only type 5 satisfies all six, but it's a compromise that was not built
+from an estimation argument. Types 6-9 each satisfy five of the six and
+have a clearer theoretical basis, and of these, H&F recommend type 8 as a
+general default because its estimate of $Q(p)$ is approximately
+median-unbiased for *any* $F$ -- types 6 and 7 don't have this unbiased
+property, and type 9 is unbiased only for the Normal case. There's also a
+practical point in @wicklin2017 that matters here: the nine definitions
+agree closely once $n$ is fairly large (the article uses $n=100$), but
+differ more for small samples or when the data have large gaps between
+neighbouring values, which includes the $n=5$ cells used in the Monte
+Carlo comparison below.
+
+**Choice used in this report.** Type 8 is used throughout (the default for
+`lambda_iqr()` above, and everywhere it is called), for two extra reasons
+on top of H&F's own recommendation: the Exponential distribution used
+here is clearly skewed, unlike the Normal that type 9 targets, and the
+smallest sample size in the design, $n=5$, is exactly where @wicklin2017
+shows the choice of definition matters most. And this choice isn't only
+about this section -- $\hat\lambda_{IQR}$ gets used again in the
+bootstrap correction below, and in every replication of the Monte Carlo
+experiment further on, so a bad quantile definition here would carry
+through to those results too.
+
+**Software default.** R's `quantile()` defaults to type 7, confirmed
+below. This comes from S-Plus, whose `quantile()` used type 7
+(@hyndman1996, Section 4), and R inherited it. Type 7 is not the type 8
+that H&F recommend.
 
 ```{r q1-defaults}
 quantile(1:10)                              # uses R's default type
@@ -73,7 +106,15 @@ identical(quantile(1:10), quantile(1:10, type = 7)) # confirms default = type 7
 
 ## Bootstrap bias-corrected estimator [20%]
 
-**Derivation.** For a fixed sample $\mathbf{X}$ of size $n$, draw $B$ bootstrap
+**Derivation.** The bias of $\hat\lambda_{IQR}$ would ideally be found by
+simulating many samples from the true Exponential($\lambda$) distribution
+and comparing the average of $\hat\lambda_{IQR}$ across those samples to
+the true $\lambda$, as covered in the Week 9 lecture, but in practice
+there is only one sample $\mathbf{X}$ and the true $\lambda$ is unknown.
+Bootstrap gets around this by treating $\mathbf{X}$ itself as a stand-in
+for the
+population, and $\hat\lambda_{IQR}(\mathbf{X})$ as a stand-in for the
+unknown true value. For a fixed sample $\mathbf{X}$ of size $n$, draw $B$ bootstrap
 resamples $\mathbf{X}^*_1,\dots,\mathbf{X}^*_B$ (sampling $n$ values from $\mathbf X$
 with replacement). The bootstrap estimate of the bias of $\hat\lambda_{IQR}$ is
 
@@ -93,10 +134,11 @@ lambda_iqr <- function(x, type = 8) {
 
 lambda_tilde <- function(x, B = 200, type = 8) {
   n <- length(x)
-  boot_est <- replicate(B, lambda_iqr(sample(x, n, replace = TRUE), type = type))
-  # For very small n, a bootstrap resample can tie at the quartiles (q3 = q1),
-  # making lambda_iqr(.) = Inf; we drop these degenerate resamples from the
-  # bootstrap average rather than let a single Inf dominate the correction.
+  boot_est <- replicate(B, lambda_iqr(sample(x, n, replace = TRUE),
+                                       type = type))
+  # Small n: a bootstrap resample can tie at the quartiles (q3=q1), making
+  # lambda_iqr(.) = Inf. Drop these before averaging so one Inf doesn't
+  # dominate the correction.
   boot_est <- boot_est[is.finite(boot_est)]
   2 * lambda_iqr(x, type = type) - mean(boot_est)
 }
@@ -109,11 +151,22 @@ c(ML = lambda_ml(x), IQR = lambda_iqr(x), bias_corrected = lambda_tilde(x))
 
 ## Monte Carlo comparison [20%]
 
-TODO: justify the number of Monte Carlo replications per $(\lambda, n)$ cell using
-the CLT-based precision argument in @robert2009 (Ch. 3): the standard error of a
-Monte Carlo estimate of $\mathrm{MSE}$ is $\sqrt{\widehat{\mathrm{Var}}/R}$, so $R$
-is chosen so this is small relative to the MSE values being compared. Smaller $n$
-and more extreme $\lambda$ give higher-variance estimators and need larger $R$.
+**Design.** The structure follows the course's own Monte Carlo tutorial
+[@frery2026mc]: for each situation $(\lambda, n) \in \Lambda \times N$,
+$R$ independent replications are generated, each replication gives one
+sample $\mathbf{X}$ of size $n$ and one value of each of the three
+estimators, and the MSE for that situation is the sample mean of
+$(\hat\lambda - \lambda)^2$ over the $R$ replications.
+
+$R=5000$ is used for every situation here, straight from the Week 9
+lecture, where the lecturer said 5000 replications per case is enough
+for an assignment this size, and that you only need to control $R$ more
+tightly in much bigger experiments. It also leaves a
+decent margin on precision: the standard error of the Monte Carlo
+estimate of MSE is about
+$\sqrt{\widehat{\mathrm{Var}}[(\hat\lambda-\lambda)^2]/R}$, and even at
+$n=5$, where the estimators are most variable, $R=5000$ keeps this small
+next to the MSE values being compared.
 
 ```{r mc-experiment}
 #| cache: true
@@ -122,28 +175,88 @@ mc_mse <- function(lambda, n, R, B = 200, type = 8) {
                 dimnames = list(NULL, c("ML", "IQR", "bias_corrected")))
   for (r in seq_len(R)) {
     x <- rexp(n, rate = lambda)
-    est[r, ] <- c(lambda_ml(x), lambda_iqr(x, type = type), lambda_tilde(x, B = B, type = type))
+    est[r, ] <- c(lambda_ml(x), lambda_iqr(x, type = type),
+                  lambda_tilde(x, B = B, type = type))
   }
   colMeans((est - lambda)^2)
 }
 
 lambda_grid <- c(0.1, 1, 10)
 n_grid <- c(5, 30, 100)
-R_grid <- c(`5` = 3000, `30` = 1500, `100` = 800)
+R <- 5000
 
 results <- do.call(rbind, lapply(lambda_grid, function(lam) {
   do.call(rbind, lapply(n_grid, function(n) {
-    mse <- mc_mse(lam, n, R = R_grid[[as.character(n)]])
-    data.frame(lambda = lam, n = n, R = R_grid[[as.character(n)]],
-               t(mse), check.names = FALSE)
+    mse <- mc_mse(lam, n, R = R)
+    data.frame(lambda = lam, n = n, R = R, t(mse), check.names = FALSE)
   }))
 }))
 results
 ```
 
-TODO: discuss the table above (which estimator wins in each corner of the design,
-whether the bias correction actually helps $\hat\lambda_{IQR}$, small-$n$ vs large-$n$
-behaviour).
+The same numbers are easier to compare as a plot, especially since
+`bias_corrected`'s MSE spans several orders of magnitude across the
+design -- both axes below are on a log scale.
+
+```{r mc-plot}
+#| fig-width: 8
+#| fig-height: 3
+est_names <- c("ML", "IQR", "bias_corrected")
+results_long <- do.call(rbind, lapply(est_names, function(est) {
+  data.frame(lambda = results$lambda, n = results$n,
+             estimator = est, mse = results[[est]])
+}))
+
+ggplot(results_long, aes(n, mse, color = estimator)) +
+  geom_line() + geom_point() +
+  scale_x_log10(breaks = c(5, 30, 100)) +
+  scale_y_log10() +
+  facet_wrap(~ lambda, labeller = label_both) +
+  labs(x = "n (log scale)", y = "MSE (log scale)", color = "Estimator")
+```
+
+**Discussion.** $\hat\lambda_{ML}$ has the lowest MSE in every one of the
+nine cells. This matches theory. It is the maximum likelihood estimator,
+so it uses the full sample through the likelihood, and it has the
+smallest asymptotic variance among regular estimators. $\hat\lambda_{IQR}$
+only uses two order statistics, so it should do worse. The MSE gap between
+the two stays in a similar range across the design: $\hat\lambda_{IQR}$'s
+MSE is roughly 1.6 to 2.5 times $\hat\lambda_{ML}$'s, at every
+$(\lambda, n)$ combination, with no clear trend as $n$ or $\lambda$
+change. This roughly matches the idea that the IQR estimator has a fixed
+*asymptotic* efficiency loss from throwing away most of the sample, but
+that result only has to hold as $n\to\infty$ -- some of the spread in the
+ratio seen here could be genuine finite-sample behaviour rather than just
+Monte Carlo noise from a design that is too small to pin the ratio down
+exactly.
+
+The bias-corrected estimator $\tilde\lambda$ is *worse* than the
+uncorrected $\hat\lambda_{IQR}$ at every single $(\lambda, n)$ in the
+design, not only at $n=5$. At $n=100$, the correction makes MSE about
+15-18% bigger than $\hat\lambda_{IQR}$, across all three $\lambda$
+values. At $n=30$, the gap is about 24-26%. At $n=5$, it is much worse:
+three to four orders of magnitude bigger. The reason is a bias-variance
+trade-off that goes the wrong way. $\hat\lambda_{IQR}$ is a nonlinear
+function (a reciprocal) of the sample's interquartile spread. A bootstrap
+resample can, just by chance, have a noticeably smaller or larger spread
+than the original sample. After taking the reciprocal, and then doubling
+it in $\tilde\lambda = 2\hat\lambda_{IQR} - \overline{\hat\lambda_{IQR}^*}$,
+this small chance difference turns into a large swing in the correction
+term. The variance this adds is bigger than the bias it removes, so MSE
+gets worse overall, and more so as $n$ shrinks, because bootstrap
+resamples are then more likely to have an unusually small spread. So the
+first-order bootstrap correction does not help this estimator, at any of
+the sample sizes tested here.
+
+All three estimators' MSE decreases roughly with $1/n$, which matches the
+usual parametric convergence rate, and it also increases roughly with
+$\lambda^2$: at $n=5$, $\mathrm{MSE}(\hat\lambda_{ML})/\lambda^2$ is about
+0.64, 0.57, and 0.62 at $\lambda=0.1,1,10$, and these are close enough
+that the ratio looks roughly constant. That makes sense since $\hat\lambda$
+estimates a rate (units of $1/\text{time}$), so squared error should
+scale with $\lambda^2$ under a simple change of the time unit.
+
+\newpage
 
 # Exercise 2
 
