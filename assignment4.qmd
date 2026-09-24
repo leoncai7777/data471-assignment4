@@ -55,55 +55,53 @@ set.seed(471)
 ## Order statistics for the quartiles [10%]
 
 **Summary of the two articles.** Nine common definitions of the sample
-quantile are compared in @wicklin2017, and they all follow the same
-general form given in @hyndman1996 (H&F): $\hat Q(p) = (1-\gamma)x_{(j)} +
-\gamma x_{(j+1)}$, where $x_{(j)}$ and $x_{(j+1)}$ are the order statistics
-closest to $p$ and $\gamma$ is an interpolation weight, with $j$ and
-$\gamma$ both depending on $p$, the sample size $n$, and a parameter $m$
-that is different for each definition ($j=\lfloor np+m\rfloor$).
+quantile are compared in @wicklin2017. They all follow the same general
+form from @hyndman1996 (H&F): $\hat Q(p) = (1-\gamma)x_{(j)} +
+\gamma x_{(j+1)}$, where $x_{(j)}$ and $x_{(j+1)}$ are the two order
+statistics closest to $p$ and $\gamma$ is a weight between them. Both $j$
+and $\gamma$ depend on $p$, the sample size $n$, and a number $m$ that is
+different for each definition ($j=\lfloor np+m\rfloor$).
 
-The nine definitions split into two groups. Types 1-3 are discontinuous,
-meaning they jump between values instead of changing smoothly, since they
-come directly from the empirical CDF, and they always give a value that
-already appears in the data (or the average of two adjacent values) --
-this group is plotted as a staircase in @wicklin2017. Types 4-9 are continuous and
-interpolate between order statistics using a *plotting position* $p_k$,
-the probability assigned to order statistic $x_{(k)}$, and these six types
-split further by how $p_k$ is derived: types 6, 7 and 8 use a
-*distribution-free* rule ($p_k$ does not depend on the population
-distribution $F$), while type 9 is built to be almost unbiased only for
-QQ-plots against a Normal distribution, so it depends on $F$ instead.
+The nine definitions fall into two groups. Types 1-3 are discontinuous:
+they jump between values instead of changing smoothly, because they come
+straight from the empirical CDF, and they always give a value that is
+already in the data (or the average of two neighbouring values). This
+group is plotted as a staircase in @wicklin2017. Types 4-9 are continuous
+and interpolate between order statistics using a *plotting position*
+$p_k$, the probability given to the $k$-th order statistic. These six
+differ in how $p_k$ is chosen: types 6, 7 and 8 use a rule that does not
+depend on the population distribution $F$ (*distribution-free*), while
+type 9 is built to be almost unbiased only for QQ-plots against a Normal
+distribution, so it depends on $F$.
 
-Each definition is also checked in @hyndman1996 against six properties a
-good sample quantile should have (continuity in $p$, symmetry in the
-tails, uniqueness, and matching the usual sample median at $p=0.5$), and
-only type 5 satisfies all six, but it's a compromise that was not built
-from an estimation argument. Types 6-9 each satisfy five of the six and
-have a clearer theoretical basis, and of these, H&F recommend type 8 as a
-general default because its estimate of $Q(p)$ is approximately
-median-unbiased for *any* $F$ -- types 6 and 7 don't have this unbiased
-property, and type 9 is unbiased only for the Normal case. There's also a
-practical point in @wicklin2017 that matters here: the nine definitions
-agree closely once $n$ is fairly large (the article uses $n=100$), but
-differ more for small samples or when the data have large gaps between
-neighbouring values, which includes the $n=5$ cells used in the Monte
-Carlo comparison below.
+H&F also check each definition against six properties a good sample
+quantile should have (for example continuity in $p$, symmetry in the
+tails, and agreeing with the usual sample median at $p=0.5$). Only type 5
+satisfies all six, but it is more of a compromise and was not built from
+an estimation argument. Types 6-9 each satisfy five of the six and have a
+clearer theoretical basis. Among them, H&F recommend type 8 as a general
+default, because its estimate of $Q(p)$ is approximately median-unbiased
+whatever $F$ is. Types 6 and 7 do not have this property, and type 9 has
+it only for the Normal case. One more point from @wicklin2017 matters
+here: the nine definitions agree closely for larger samples (the article
+uses $n=100$) but can differ more for small samples or when there are
+big gaps between neighbouring values, which includes the $n=5$ cells in
+the Monte Carlo comparison below.
 
-**Choice used in this report.** Type 8 is used throughout (the default for
-`lambda_iqr()` above, and everywhere it is called), for two extra reasons
-on top of H&F's own recommendation: the Exponential distribution used
-here is clearly skewed, unlike the Normal that type 9 targets, and the
-smallest sample size in the design, $n=5$, is exactly where @wicklin2017
-shows the choice of definition matters most. And this choice isn't only
-about this section -- $\hat\lambda_{IQR}$ gets used again in the
-bootstrap correction below, and in every replication of the Monte Carlo
-experiment further on, so a bad quantile definition here would carry
-through to those results too.
+**Choice used in this report.** I use type 8 throughout (it is the
+default in `lambda_iqr()` and everywhere that function is called). Apart
+from H&F's own recommendation, there are two reasons: the Exponential
+distribution is clearly skewed, unlike the Normal that type 9 is made
+for, and the smallest sample size in the design, $n=5$, is exactly where
+@wicklin2017 shows the choice matters most. It also carries through:
+$\hat\lambda_{IQR}$ is reused in the bootstrap correction and in every
+Monte Carlo replication, so a bad quantile definition here would affect
+those results too.
 
-**Software default.** R's `quantile()` defaults to type 7, confirmed
-below. This comes from S-Plus, whose `quantile()` used type 7
-(@hyndman1996, Section 4), and R inherited it. Type 7 is not the type 8
-that H&F recommend.
+**Software default.** R's `quantile()` uses type 7 by default, checked
+below. This goes back to S-Plus, which used type 7 (@hyndman1996,
+Section 4), and R uses the same default. So the R default is not the type 8 that H&F
+recommend.
 
 ```{r q1-defaults}
 quantile(1:10)                              # uses R's default type
@@ -112,17 +110,17 @@ identical(quantile(1:10), quantile(1:10, type = 7)) # confirms default = type 7
 
 ## Bootstrap bias-corrected estimator [20%]
 
-**Derivation.** The bias of $\hat\lambda_{IQR}$ would ideally be found by
-simulating many samples from the true Exponential($\lambda$) distribution
-and comparing the average of $\hat\lambda_{IQR}$ across those samples to
-the true $\lambda$, as covered in the Week 9 lecture, but in practice
-there is only one sample $\mathbf{X}$ and the true $\lambda$ is unknown.
-Bootstrap gets around this by treating $\mathbf{X}$ itself as a stand-in
-for the
-population, and $\hat\lambda_{IQR}(\mathbf{X})$ as a stand-in for the
-unknown true value. For a fixed sample $\mathbf{X}$ of size $n$, draw $B$ bootstrap
-resamples $\mathbf{X}^*_1,\dots,\mathbf{X}^*_B$ (sampling $n$ values from $\mathbf X$
-with replacement). The bootstrap estimate of the bias of $\hat\lambda_{IQR}$ is
+**Derivation.** If we knew the true Exponential($\lambda$) distribution,
+we could estimate the bias of $\hat\lambda_{IQR}$ by simulating many
+samples from it and comparing the average of $\hat\lambda_{IQR}$ with
+the true $\lambda$, as in the Week 9 lecture. In practice we only have
+one sample $\mathbf{X}$ and do not know $\lambda$. The bootstrap gets
+around this by treating $\mathbf{X}$ as if it were the population, and
+$\hat\lambda_{IQR}(\mathbf{X})$ as if it were the true value. For a fixed
+sample $\mathbf{X}$ of size $n$, draw $B$ bootstrap resamples
+$\mathbf{X}^*_1,\dots,\mathbf{X}^*_B$ (each one has $n$ values sampled
+from $\mathbf X$ with replacement). The bootstrap estimate of the bias of
+$\hat\lambda_{IQR}$ is
 
 $$\widehat{\mathrm{bias}} = \frac{1}{B}\sum_{b=1}^B \hat\lambda_{IQR}(\mathbf{X}_b^*) - \hat\lambda_{IQR}(\mathbf{X}).$$
 
@@ -157,22 +155,21 @@ c(ML = lambda_ml(x), IQR = lambda_iqr(x), bias_corrected = lambda_tilde(x))
 
 ## Monte Carlo comparison [20%]
 
-**Design.** The structure follows the course's own Monte Carlo tutorial
+**Design.** This follows the course's Monte Carlo tutorial
 [@frery2026mc]: for each situation $(\lambda, n) \in \Lambda \times N$,
-$R$ independent replications are generated, each replication gives one
-sample $\mathbf{X}$ of size $n$ and one value of each of the three
-estimators, and the MSE for that situation is the sample mean of
+$R$ independent replications each give one sample $\mathbf{X}$ of size
+$n$ and one value of each estimator, and the MSE is the average of
 $(\hat\lambda - \lambda)^2$ over the $R$ replications.
 
-$R=5000$ is used for every situation here, straight from the Week 9
-lecture, where the lecturer said 5000 replications per case is enough
-for an assignment this size, and that you only need to control $R$ more
-tightly in much bigger experiments. It also leaves a
-decent margin on precision: the standard error of the Monte Carlo
-estimate of MSE is about
-$\sqrt{\widehat{\mathrm{Var}}[(\hat\lambda-\lambda)^2]/R}$, and even at
-$n=5$, where the estimators are most variable, $R=5000$ keeps this small
-next to the MSE values being compared.
+I use $R=5000$ for every situation, as suggested in the Week 9 lecture.
+The `rel_se` column below checks this: for each case it is the biggest,
+over the three estimators, of the Monte Carlo standard error of the MSE
+divided by the MSE. It is only 2-3.5% for $n=30$ and $n=100$, but 70-90%
+for $n=5$, where a few extreme replications dominate the averages (most
+of all for `bias_corrected`). So the $n=5$ values are rough. The huge
+`bias_corrected` gap there is safe from that, but the other comparisons
+are better read from $n=30$ and $n=100$. Using the same $R$ everywhere
+keeps the cells comparable.
 
 ```{r mc-experiment}
 #| cache: true
@@ -186,7 +183,9 @@ mc_mse <- function(lambda, n, R, B = 200, type = 8) {
     est[r, ] <- c(lambda_ml(x), lambda_iqr(x, type = type),
                   lambda_tilde(x, B = B, type = type))
   }
-  colMeans((est - lambda)^2)
+  sq_err <- (est - lambda)^2
+  rel_se <- max(apply(sq_err, 2, sd) / sqrt(R) / colMeans(sq_err))
+  c(colMeans(sq_err), rel_se = rel_se)
 }
 
 lambda_grid <- c(0.1, 1, 10)
@@ -202,11 +201,11 @@ results <- do.call(rbind, lapply(lambda_grid, function(lam) {
 results
 ```
 
-The same numbers are easier to compare as a plot, especially since
-`bias_corrected`'s MSE spans several orders of magnitude across the
-design -- @fig-mc puts both axes on a log scale.
+@fig-mc plots the same numbers on log-log axes, since
+`bias_corrected`'s MSE spans several orders of magnitude.
 
 ```{r fig-mc}
+#| echo: false
 #| fig-width: 8
 #| fig-height: 3
 #| fig-cap: "MSE of the three estimators across the $(\\lambda, n)$ design, log-log scale."
@@ -225,44 +224,41 @@ ggplot(results_long, aes(n, mse, color = estimator)) +
 ```
 
 **Discussion.** $\hat\lambda_{ML}$ has the lowest MSE in every one of the
-nine cells. This matches theory. It is the maximum likelihood estimator,
-so it uses the full sample through the likelihood, and it has the
-smallest asymptotic variance among regular estimators. $\hat\lambda_{IQR}$
-only uses two order statistics, so it should do worse. The MSE gap between
-the two stays in a similar range across the design: $\hat\lambda_{IQR}$'s
-MSE is roughly 1.6 to 2.5 times $\hat\lambda_{ML}$'s, at every
-$(\lambda, n)$ combination, with no clear trend as $n$ or $\lambda$
-change. This roughly matches the idea that the IQR estimator has a fixed
-*asymptotic* efficiency loss from throwing away most of the sample, but
-that result only has to hold as $n\to\infty$ -- some of the spread in the
-ratio seen here could be genuine finite-sample behaviour rather than just
-Monte Carlo noise from a design that is too small to pin the ratio down
-exactly.
+nine cells, which is what theory says: it is the maximum likelihood
+estimator, uses the whole sample, and has the smallest variance for large
+samples among the usual estimators. $\hat\lambda_{IQR}$ only uses two
+order statistics, so it should do worse. The MSE gap stays in a similar
+range across the design: $\hat\lambda_{IQR}$'s MSE is roughly 1.6 to 2.5
+times $\hat\lambda_{ML}$'s at every $(\lambda, n)$, with no clear trend
+in $n$ or $\lambda$. This roughly fits the idea that the IQR estimator
+loses a fixed share of efficiency by throwing away most of the sample,
+although that result is only guaranteed as $n\to\infty$. The spread in
+the ratio is bigger than the Monte Carlo error at $n=30$ and $n=100$, so
+part of it is real finite-sample behaviour, not just noise.
 
 The bias-corrected estimator $\tilde\lambda$ is *worse* than the
-uncorrected $\hat\lambda_{IQR}$ at every single $(\lambda, n)$ in the
-design, not only at $n=5$. At $n=100$, the correction makes MSE about
-15-18% bigger than $\hat\lambda_{IQR}$, across all three $\lambda$
-values. At $n=30$, the gap is about 24-26%. At $n=5$, it is much worse:
-three to four orders of magnitude bigger. The reason is a bias-variance
-trade-off that goes the wrong way. $\hat\lambda_{IQR}$ is a nonlinear
-function (a reciprocal) of the sample's interquartile spread. A bootstrap
-resample can, by chance, have a smaller or larger spread than the
-original sample. After taking the reciprocal, and then doubling
-it in $\tilde\lambda = 2\hat\lambda_{IQR} - \overline{\hat\lambda_{IQR}^*}$,
-this small chance difference turns into a large swing in the correction
-term. The variance this adds is bigger than the bias it removes, so MSE
-gets worse overall, and more so as $n$ shrinks, because bootstrap
-resamples are then more likely to have an unusually small spread. So the
-first-order bootstrap correction does not help this estimator, at any of
-the sample sizes tested here.
+uncorrected $\hat\lambda_{IQR}$ at every $(\lambda, n)$ in the design,
+not only at $n=5$. At $n=100$ the correction makes the MSE about 15-18%
+bigger, at $n=30$ about 24-26% bigger, and at $n=5$ it is much worse:
+about 700 to 5000 times bigger. I think the reason is a
+bias-variance trade-off that goes the wrong way. $\hat\lambda_{IQR}$ is
+a reciprocal of the sample's interquartile spread, so it is nonlinear. A
+bootstrap resample can, by chance, have a smaller or larger spread than
+the original sample. After taking the reciprocal and doubling it in
+$\tilde\lambda = 2\hat\lambda_{IQR} - \overline{\hat\lambda_{IQR}^*}$,
+this small difference becomes a big swing in the correction term. The
+variance this adds is larger than the bias it removes, so the MSE gets
+worse, and more so when $n$ is small, because bootstrap resamples are
+then more likely to have an unusually small spread. So the first-order
+bootstrap correction does not help this estimator at any of the sample
+sizes tested.
 
-All three estimators' MSE decreases roughly with $1/n$, matching the
-usual parametric convergence rate, and increases roughly with
-$\lambda^2$: at $n=5$, $\mathrm{MSE}(\hat\lambda_{ML})/\lambda^2$ is
-about 0.64, 0.57, and 0.62 at $\lambda=0.1,1,10$, close enough that the
-ratio looks roughly constant. That makes sense: $\hat\lambda$ is a
-rate, so squared error scales with $\lambda^2$ under a change of unit.
+The MSE of $\hat\lambda_{ML}$ and $\hat\lambda_{IQR}$ goes down as $n$
+grows, roughly like $1/n$ between $n=30$ and $n=100$ (faster from $n=5$
+to $n=30$), and it goes up roughly with $\lambda^2$: at $n=5$,
+$\mathrm{MSE}(\hat\lambda_{ML})/\lambda^2$ is about 0.64, 0.57, and 0.62
+at $\lambda=0.1,1,10$. That is what a rate should do under a change of
+time unit. The bias-corrected estimator does not follow this at $n=5$.
 
 \newpage
 
@@ -275,7 +271,8 @@ refer back to this same series, some directly from the plot and some
 from numbers computed later.
 
 ```{r fig-ausbeer}
-#| out-width: "85%"
+#| echo: false
+#| out-width: "60%"
 #| fig-cap: "Quarterly Australian beer production, 1956 Q1--2010 Q2."
 autoplot(ausbeer, color = "steelblue") +
   labs(y = "Megalitres")
@@ -287,6 +284,7 @@ The frequency is 4 (quarterly data), and the series runs from 1956 Q1 to
 2010 Q2, confirmed below by `frequency()`, `start()` and `end()`.
 
 ```{r ausbeer-freq}
+#| collapse: true
 frequency(ausbeer)
 start(ausbeer)
 end(ausbeer)
@@ -298,7 +296,8 @@ handful of years in @fig-ausbeer-zoom makes the four-per-year pattern
 countable directly:
 
 ```{r fig-ausbeer-zoom}
-#| out-width: "85%"
+#| echo: false
+#| out-width: "60%"
 #| fig-cap: "`ausbeer` zoomed into 1985--1990, showing four quarters per year."
 autoplot(window(ausbeer, start = 1985, end = 1990), color = "steelblue") +
   labs(y = "Megalitres")
@@ -307,26 +306,21 @@ autoplot(window(ausbeer, start = 1985, end = 1990), color = "steelblue") +
 ## Describe the overall behaviour of the series. Is there evidence of a long-term trend?
 
 There isn't one single trend here, more like three phases. Production
-rises steadily from 1956 to around the mid-1970s (from about 260 to
-about 485 megalitres, nearly doubling), then plateaus and fluctuates
-around a peak from the mid-1970s to about 1990, then drops fairly
-sharply in the early 1990s (from about 490 down to about 445 in just
-three years) before levelling off at that lower level through the
-2000s.
+rises steadily from 1956 to the mid-1970s (about 260 to 485 megalitres,
+nearly doubling), stays high and fluctuates until about 1990, then drops
+fairly sharply in the early 1990s (about 490 to 445 in three years) and
+levels off there through the 2000s.
 
-To check this against a straight line without fitting any model, @fig-ausbeer-trend
-joins the early-period average (1956-60) to the late-period average
-(2005-10) with a red line. If the trend were linear, the yearly average
-would stay close to this line all the way through. Instead it sits above
-it for about thirty-five years, from the mid-1960s to around 2000, by
-roughly 100-165 megalitres between 1970 and 1990, and only comes back to
-the line at the end. The yearly average, in blue, makes the three phases
-clearer than either the raw quarterly plot (@fig-ausbeer) or the
-straight line on their own.
+To check this against a straight line without fitting any model,
+@fig-ausbeer-trend joins the early-period average (1956-60) to the
+late-period average (2005-10) with a red line. If the trend were linear,
+the yearly average (blue) would stay close to it. Instead it sits above
+the line from the mid-1960s to around 2000, by roughly 100-165
+megalitres between 1970 and 1990, and only returns to it at the end. So
+the trend is not a straight line, and the blue line shows the three
+phases more clearly than the raw quarterly plot (@fig-ausbeer).
 
-```{r fig-ausbeer-trend}
-#| out-width: "85%"
-#| fig-cap: "`ausbeer`'s yearly average (blue) against a straight line joining the early- and late-period averages (red)."
+```{r ausbeer-line}
 ausbeer_df <- data.frame(time = as.numeric(time(ausbeer)),
                           value = as.numeric(ausbeer))
 yearly <- aggregate(value ~ floor(time), ausbeer_df, mean)
@@ -339,7 +333,12 @@ t_early <- mean(ausbeer_df$time[ausbeer_df$time < 1961])
 t_late <- mean(ausbeer_df$time[ausbeer_df$time >= 2005])
 ausbeer_df$line <- early +
   (late - early) * (ausbeer_df$time - t_early) / (t_late - t_early)
+```
 
+```{r fig-ausbeer-trend}
+#| echo: false
+#| out-width: "60%"
+#| fig-cap: "`ausbeer`'s yearly average (blue) against a straight line joining the early- and late-period averages (red)."
 ggplot(ausbeer_df, aes(time, value)) +
   geom_line(alpha = 0.5) +
   geom_line(aes(y = line), color = "red", linetype = "dashed") +
@@ -355,9 +354,28 @@ low in Q2 and Q3 and high in Q4, confirmed by the quarter averages
 below. Q4 is clearly the highest quarter and Q2 the lowest.
 
 ```{r ausbeer-quarter-means}
+#| collapse: true
 quarter_means <- aggregate(as.numeric(ausbeer) ~ cycle(ausbeer), FUN = mean)
 names(quarter_means) <- c("quarter", "mean")
 quarter_means
+```
+
+Looking at each of the 54 full years (2010 is incomplete), the highest
+quarter is Q4 in every single year, and the lowest is Q2 in 48 years
+and Q3 in the other six:
+
+```{r ausbeer-by-year}
+#| collapse: true
+by_year <- data.frame(year = floor(as.numeric(time(ausbeer))),
+                      quarter = as.numeric(cycle(ausbeer)),
+                      value = as.numeric(ausbeer))
+by_year <- by_year[by_year$year < 2010, ]
+highest <- sapply(split(by_year, by_year$year),
+                  function(d) d$quarter[which.max(d$value)])
+lowest <- sapply(split(by_year, by_year$year),
+                 function(d) d$quarter[which.min(d$value)])
+table(highest)
+table(lowest)
 ```
 
 @fig-ausbeer-box shows this isn't just an average effect: Q4's box
@@ -366,7 +384,8 @@ overlap with Q1's, so Q4 being the high quarter is a consistent,
 year-on-year pattern rather than something driven by a few big years.
 
 ```{r fig-ausbeer-box}
-#| out-width: "85%"
+#| echo: false
+#| out-width: "60%"
 #| fig-cap: "Distribution of `ausbeer` by quarter."
 qdf <- data.frame(quarter = factor(cycle(ausbeer)),
                    value = as.numeric(ausbeer))
@@ -379,77 +398,69 @@ ggplot(qdf, aes(quarter, value, fill = quarter)) +
 
 ## Does the variability appear constant over time? Explain what you see in the plot and whether a transformation might be appropriate.
 
-Not really constant, but not in the usual direction. This shows up in
-@fig-ausbeer: the seasonal swings look visibly tighter in the 2000s
-than they did in the 1970s-90s, even though the level in that period
-isn't dramatically different. The breakdown below puts a number on it. The
-variability (measured here as the standard deviation within each
-period) actually *shrinks* over time, even though the level itself goes
-up and then back down:
+Not really constant. In @fig-ausbeer the seasonal swings look visibly
+tighter in the 2000s than in the 1970s-90s, even though the level is not
+dramatically lower. To put a number on it, I measured the swing in each
+full year as the highest quarter minus the lowest (this way the trend
+is not counted as variability), and averaged it over each period, next
+to the level and the swing as a share of the level:
 
 ```{r ausbeer-variance}
 breaks <- c(1955, 1970, 1980, 1990, 2000, 2011)
-labels <- c("1956-70", "1971-80", "1981-90", "1991-2000", "2001-10")
-period <- cut(ausbeer_df$time, breaks = breaks, labels = labels)
-aggregate(value ~ period, data.frame(ausbeer_df, period),
-          function(x) c(mean = mean(x), sd = sd(x)))
+labels <- c("1956-70", "1971-80", "1981-90", "1991-2000", "2001-09")
+year_level <- tapply(by_year$value, by_year$year, mean)
+year_swing <- tapply(by_year$value, by_year$year,
+                     function(x) max(x) - min(x))
+period <- cut(as.numeric(names(year_swing)), breaks = breaks, labels = labels)
+level <- tapply(year_level, period, mean)
+swing <- tapply(year_swing, period, mean)
+round(data.frame(level, swing, share = swing / level, row.names = labels), 2)
 ```
 
-The standard deviation doesn't track the mean in any simple way here:
-1971-80 has the highest sd despite a middling mean, and 1981-90 has the
-highest mean despite one of the *lower* sds. The clearest pattern is at
-the far end, where the most recent period's spread (38) is distinctly
-smaller than every earlier period's (54-61), even though its own level
-isn't unusual. The relative variability (sd divided by mean) tells a
-similar story, highest early and lowest late, though not a clean
-monotonic slide in between. Either way, this is not the classic case
-for a log transform, where the size of the fluctuations is supposed to
-grow *with* the level. If anything the opposite shows up at the two
-ends of the series.
+The swing grows from about 100 megalitres in 1956-70 to about 135 in
+1981-90 while the level goes from about 310 to 480, so early on the two
+move together, which is the pattern a log transform is meant for. After
+that the swing falls back to about 95 in the 2000s while the level only
+drops to about 430. As a share of the level the swing stays around 0.27
+to 0.29 from 1971 to 2000, is higher early (0.32) and lowest at the end
+(0.22). So the evidence for a log transform, where swings are supposed
+to grow in proportion to the level, is mixed: some support in the early
+decades, but it does not hold in the 2000s.
 
 ## Are there any observations that you would regard as unusual? Identify them and explain why they attract attention.
 
-Two things stand out, of different kinds. The first is structural: the
-whole pre-1975-ish period behaves differently from the rest of the
-series, both in level (much lower) and in relative variability (much
-higher, as shown above). Even the "outlier" points below the whiskers
-in @fig-ausbeer-box are all from 1956-61, so they're this same
-structural thing showing up again rather than scattered noise. This
-same split shows up in @hyndman2018, which restricts to
-`window(ausbeer, start = 1992)` before fitting any forecasting model to
-this dataset, since the earlier decades reflect a different, still
-growing market rather than the more settled pattern seen from the 1990s
-on.
+Two things stand out. The first is that the whole period before about
+1975 looks different from the rest: the level is much lower (about 310
+against 430-480 later) and the swings are relatively bigger (0.32 of
+the level against 0.22-0.29), as shown above. The points below the
+whiskers in @fig-ausbeer-box are all from 1956-61, so they belong to the
+same thing rather than being scattered noise. The forecasting examples
+in @hyndman2018 mostly use `window(ausbeer, start = 1992)`, which
+fits this: the early decades look like a different, still growing
+period.
 
-The second is a genuine point-level anomaly: 1981 Q1 comes in at 548,
-well above its neighbouring Q1 values (453-515 across the surrounding
-decade). Comparing every quarter with the average of the same quarter in the
-three years either side (no model involved), it is the largest gap
-anywhere in `ausbeer`: 56 megalitres above its neighbours, about 3.8
-times the typical size of that gap:
+The second is one single odd point: 1981 Q1 comes in at 548. I compared
+every quarter with the average of the same quarter in the three years on
+each side (no model involved), and this is the biggest gap anywhere in
+`ausbeer`: 56 megalitres above its neighbours, about 3.8 times the
+typical size of that gap:
 
 ```{r ausbeer-local-gap}
 ausbeer_df$quarter <- as.numeric(cycle(ausbeer))
-local_gap <- sapply(seq_len(nrow(ausbeer_df)), function(i) {
-  near <- ausbeer_df$quarter == ausbeer_df$quarter[i] &
-    abs(ausbeer_df$time - ausbeer_df$time[i]) <= 3 &
-    seq_len(nrow(ausbeer_df)) != i
-  if (sum(near) < 4) return(NA)
-  ausbeer_df$value[i] - mean(ausbeer_df$value[near])
-})
+local_gap <- rep(NA, nrow(ausbeer_df))
+for (i in seq_len(nrow(ausbeer_df))) {
+  same_quarter <- ausbeer_df$quarter == ausbeer_df$quarter[i]
+  close_in_time <- abs(ausbeer_df$time - ausbeer_df$time[i]) <= 3
+  neighbours <- same_quarter & close_in_time & seq_len(nrow(ausbeer_df)) != i
+  if (sum(neighbours) >= 4) {
+    local_gap[i] <- ausbeer_df$value[i] - mean(ausbeer_df$value[neighbours])
+  }
+}
 ausbeer_df$time[which.max(abs(local_gap))]
 max(abs(local_gap), na.rm = TRUE) / sd(local_gap, na.rm = TRUE)
 ```
 
 ## Plot the series by season (for example, using a seasonal plot). What does this reveal that is less obvious in the ordinary time-series plot?
-
-```{r fig-ausbeer-season}
-#| fig-height: 5
-#| out-width: "85%"
-#| fig-format: png
-#| fig-cap: "Seasonal plot of `ausbeer`, one line per year."
-ggseasonplot(ausbeer)
-```
 
 @fig-ausbeer-season puts every year on its own line across the four
 quarters. Compared to the ordinary time plot (@fig-ausbeer), this makes
@@ -459,21 +470,41 @@ a few things easier to see:
   at Q4 without exception, and usually dipping lowest at Q2 (though Q3
   is the lowest quarter in six of the 54 full years, like 1978 and
   1990).
-- The lines are stacked in the same order as the trend. The earliest
-  (coolest-coloured) years sit lowest, the lines climb up through the
-  1970s-80s, and the most recent years sit back down again.
-- Comparing the same quarter across different years is much easier
-  here than in the ordinary time plot, where the years are stretched
-  out left to right instead of stacked on top of each other.
-- The 1981 anomaly from section 2.5 is visible here too: its line
-  starts at Q1 clearly above every neighbouring year's line, standing
-  out precisely because the rest of that colour range clusters so
-  tightly together.
+- The lines are stacked in the same order as the trend: the earliest
+  (coolest-coloured) years sit lowest, the lines climb through the
+  1970s-80s, and the most recent years come back down.
+- Comparing the same quarter across years is much easier here than in
+  the ordinary time plot, where the years are spread left to right.
+- The 1981 anomaly from section 2.5 shows up here too: its line starts
+  at Q1 clearly above every neighbouring year's.
+
+```{r fig-ausbeer-season}
+#| echo: false
+#| fig-height: 5
+#| out-width: "70%"
+#| fig-format: png
+#| fig-cap: "Seasonal plot of `ausbeer`, one line per year."
+ggseasonplot(ausbeer)
+```
 
 ## Plot the seasonal subseries. Which quarters have the highest and lowest typical values? Is the seasonal pattern stable over time?
 
+@fig-ausbeer-subseries has one panel per quarter, with each quarter's
+mean marked in red:
+
+- Because the years stay in time order here (unlike the jittered points
+  in @fig-ausbeer-box), each panel still follows its own rise, plateau
+  and decline, like the overall trend. So the *level* within a quarter
+  is not stable over time: the seasonal part and the trend are mixed
+  together.
+- It also confirms two things from section 2.3: Q4 has the highest
+  typical value and Q2 the lowest, and the seasonal *pattern* (which
+  quarter is high and which is low) looks stable, not flipping or
+  fading out in any panel.
+
 ```{r fig-ausbeer-subseries}
-#| out-width: "85%"
+#| echo: false
+#| out-width: "60%"
 #| fig-format: png
 #| fig-cap: "Seasonal subseries plot of `ausbeer`, one panel per quarter."
 p_subseries <- ggsubseriesplot(ausbeer)
@@ -481,20 +512,6 @@ p_subseries$layers[[1]]$aes_params$colour <- "steelblue"
 p_subseries$layers[[2]]$aes_params$colour <- "red"
 p_subseries + labs(y = "Megalitres")
 ```
-
-@fig-ausbeer-subseries splits the series into one panel per quarter,
-keeping the years in time order within each panel (unlike the jittered
-points in @fig-ausbeer-box) and marking each quarter's mean in red:
-
-- Unlike the boxplot, keeping the time order visible means each panel
-  still traces its own version of the rise-then-plateau-then-decline
-  shape from the trend. So the *level* within a quarter is not stable
-  over time, since the seasonal and trend components aren't independent
-  of when in the series you're looking.
-- It also confirms two things from section 2.3: Q4 has the highest
-  typical value and Q2 the lowest, and the seasonal *pattern* (which
-  quarter is high and which is low) looks stable, not flipping or
-  fading out in any panel.
 
 ## Would you detrend or transform the series before modelling it? Give a visual argument for your answer. Do not fit a model.
 
@@ -510,25 +527,27 @@ itself, so a straight line clearly doesn't describe the series, and the
 trend would need to come out before it's modelled as something
 stationary.
 
-```{r fig-ausbeer-resid}
-#| out-width: "85%"
-#| fig-cap: "Gap between `ausbeer` and the straight line in Figure 4."
+```{r ausbeer-gap}
 ausbeer_df$gap <- ausbeer_df$value - ausbeer_df$line
+```
 
+```{r fig-ausbeer-resid}
+#| echo: false
+#| out-width: "60%"
+#| fig-cap: "Gap between `ausbeer` and the straight line in Figure 4."
 ggplot(ausbeer_df, aes(time, gap)) +
   geom_line(color = "steelblue") +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
   labs(x = "Time", y = "Value minus the straight line")
 ```
 
-A variance-stabilising transform (log or Box-Cox) is less clearly
-justified. The usual visual argument for a log transform is that spread
-grows with the level, and neither @fig-ausbeer nor the breakdown in
-section 2.4 really show that. The spread bounces around in the 53-61
-range while the mean rises, peaks, and starts to fall, and only drops
-noticeably (to 38) in the very last period. So a log transform doesn't
-have an obvious visual justification here, even though detrending
-clearly does.
+A transform to stabilise the variance (log or Box-Cox) is harder to
+justify. The usual visual argument for a log transform is that the
+swings grow with the level, and neither @fig-ausbeer nor the breakdown
+in section 2.4 shows that clearly: the swing grows from about 100 to
+135 megalitres as the level rises to the 1980s, but shrinks to about 95
+in the 2000s while the level stays around 430. So the case for a log
+transform is weak and mixed, even though detrending clearly is needed.
 
 \newpage
 

@@ -11,7 +11,7 @@ FILES
 
   assignment4.qmd    : Quarto source (both exercises)
   references.bib     : bibliography for the sources cited in the report
-  assignment4.pdf     : rendered report
+  assignment4.pdf    : rendered report
 
 CONTENTS
 --------
@@ -21,14 +21,16 @@ CONTENTS
                estimator, and a Monte Carlo comparison of the three by
                mean squared error.
   Exercise 2 : exploratory analysis of the `ausbeer` series (quarterly
-               Australian beer production) from the `fpp2` package.
+               Australian beer production) from the `fpp2` package,
+               answered without fitting any model.
 
 REQUIREMENTS
 ------------
 
 - Quarto
 - R, with the `fpp2` and `ggplot2` packages installed
-- lualatex (for PDF rendering)
+- lualatex for PDF rendering (TinyTeX from `quarto install tinytex`, or
+  TeX Live; the few standard LaTeX packages used are installed on demand)
 
 HOW TO RENDER
 -------------
@@ -36,6 +38,7 @@ HOW TO RENDER
   quarto render assignment4.qmd
 
   This runs all the R code and produces assignment4.pdf. The Monte
-  Carlo experiment (5000 replications x 9 cases) is cached, so the
-  first render is slower; later renders skip it unless that code
-  changes, and finish in a few seconds.
+  Carlo experiment (5000 replications x 9 cases) is cached, but the
+  cache is not part of the repository, so the first render takes about
+  7 minutes. Later renders reuse the cache unless that code changes,
+  and finish in a few seconds.
