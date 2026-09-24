@@ -14,10 +14,16 @@ format:
     citecolor: blue
     urlcolor: blue
     fig-pos: "H"
+    fig-width: 7
+    fig-height: 4
+    fig-align: center
     include-in-header:
       text: |
         \usepackage{parskip}
         \usepackage{microtype}
+        \usepackage{titlesec}
+        \titleformat{\section}{\normalfont\Large\bfseries}{}{0pt}{}
+        \titleformat{\subsection}[block]{\normalfont\large\bfseries}{\thesubsection}{1em}{}
         \setlength{\emergencystretch}{3em}
         \usepackage{enumitem}
         \setlist[enumerate]{leftmargin=1.8em, itemsep=0.25em}
@@ -170,6 +176,8 @@ next to the MSE values being compared.
 
 ```{r mc-experiment}
 #| cache: true
+#| fig-width: 7
+#| fig-height: 4
 mc_mse <- function(lambda, n, R, B = 200, type = 8) {
   est <- matrix(NA_real_, nrow = R, ncol = 3,
                 dimnames = list(NULL, c("ML", "IQR", "bias_corrected")))
@@ -196,11 +204,12 @@ results
 
 The same numbers are easier to compare as a plot, especially since
 `bias_corrected`'s MSE spans several orders of magnitude across the
-design -- both axes below are on a log scale.
+design -- @fig-mc puts both axes on a log scale.
 
-```{r mc-plot}
+```{r fig-mc}
 #| fig-width: 8
 #| fig-height: 3
+#| fig-cap: "MSE of the three estimators across the $(\\lambda, n)$ design, log-log scale."
 est_names <- c("ML", "IQR", "bias_corrected")
 results_long <- do.call(rbind, lapply(est_names, function(est) {
   data.frame(lambda = results$lambda, n = results$n,
@@ -238,8 +247,8 @@ values. At $n=30$, the gap is about 24-26%. At $n=5$, it is much worse:
 three to four orders of magnitude bigger. The reason is a bias-variance
 trade-off that goes the wrong way. $\hat\lambda_{IQR}$ is a nonlinear
 function (a reciprocal) of the sample's interquartile spread. A bootstrap
-resample can, just by chance, have a noticeably smaller or larger spread
-than the original sample. After taking the reciprocal, and then doubling
+resample can, by chance, have a smaller or larger spread than the
+original sample. After taking the reciprocal, and then doubling
 it in $\tilde\lambda = 2\hat\lambda_{IQR} - \overline{\hat\lambda_{IQR}^*}$,
 this small chance difference turns into a large swing in the correction
 term. The variance this adds is bigger than the bias it removes, so MSE
@@ -248,60 +257,293 @@ resamples are then more likely to have an unusually small spread. So the
 first-order bootstrap correction does not help this estimator, at any of
 the sample sizes tested here.
 
-All three estimators' MSE decreases roughly with $1/n$, which matches the
-usual parametric convergence rate, and it also increases roughly with
-$\lambda^2$: at $n=5$, $\mathrm{MSE}(\hat\lambda_{ML})/\lambda^2$ is about
-0.64, 0.57, and 0.62 at $\lambda=0.1,1,10$, and these are close enough
-that the ratio looks roughly constant. That makes sense since $\hat\lambda$
-estimates a rate (units of $1/\text{time}$), so squared error should
-scale with $\lambda^2$ under a simple change of the time unit.
+All three estimators' MSE decreases roughly with $1/n$, matching the
+usual parametric convergence rate, and increases roughly with
+$\lambda^2$: at $n=5$, $\mathrm{MSE}(\hat\lambda_{ML})/\lambda^2$ is
+about 0.64, 0.57, and 0.62 at $\lambda=0.1,1,10$, close enough that the
+ratio looks roughly constant. That makes sense: $\hat\lambda$ is a
+rate, so squared error scales with $\lambda^2$ under a change of unit.
 
 \newpage
 
 # Exercise 2
 
-```{r ausbeer}
-autoplot(ausbeer) + labs(title = "Quarterly Australian beer production", y = "Megalitres")
+`ausbeer` comes with the `fpp2` package. It is quarterly beer production
+data for Australia. @fig-ausbeer shows the full series; the sections on
+frequency, trend, seasonality, variance and unusual observations all
+refer back to this same series, some directly from the plot and some
+from numbers computed later.
+
+```{r fig-ausbeer}
+#| out-width: "85%"
+#| fig-cap: "Quarterly Australian beer production, 1956 Q1--2010 Q2."
+autoplot(ausbeer, color = "steelblue") +
+  labs(y = "Megalitres")
 ```
 
-## Frequency
+## What is the frequency of the series? How can you determine this from the data and/or the time-series plot?
 
-TODO
+The frequency is 4 (quarterly data), and the series runs from 1956 Q1 to
+2010 Q2, confirmed below by `frequency()`, `start()` and `end()`.
 
-## Trend
+```{r ausbeer-freq}
+frequency(ausbeer)
+start(ausbeer)
+end(ausbeer)
+```
 
-TODO
+Counting cycles by eye on the full 54-year series in @fig-ausbeer is
+hard, since each year only takes up a few pixels, but zooming into a
+handful of years in @fig-ausbeer-zoom makes the four-per-year pattern
+countable directly:
 
-## Seasonality
+```{r fig-ausbeer-zoom}
+#| out-width: "85%"
+#| fig-cap: "`ausbeer` zoomed into 1985--1990, showing four quarters per year."
+autoplot(window(ausbeer, start = 1985, end = 1990), color = "steelblue") +
+  labs(y = "Megalitres")
+```
 
-TODO
+## Describe the overall behaviour of the series. Is there evidence of a long-term trend?
 
-## Variance stability
+There isn't one single trend here, more like three phases. Production
+rises steadily from 1956 to around the mid-1970s (from about 260 to
+about 485 megalitres, nearly doubling), then plateaus and fluctuates
+around a peak from the mid-1970s to about 1990, then drops fairly
+sharply in the early 1990s (from about 490 down to about 445 in just
+three years) before levelling off at that lower level through the
+2000s.
 
-TODO
+To check this against a straight line without fitting any model, @fig-ausbeer-trend
+joins the early-period average (1956-60) to the late-period average
+(2005-10) with a red line. If the trend were linear, the yearly average
+would stay close to this line all the way through. Instead it sits above
+it for about thirty-five years, from the mid-1960s to around 2000, by
+roughly 100-165 megalitres between 1970 and 1990, and only comes back to
+the line at the end. The yearly average, in blue, makes the three phases
+clearer than either the raw quarterly plot (@fig-ausbeer) or the
+straight line on their own.
 
-## Unusual observations
+```{r fig-ausbeer-trend}
+#| out-width: "85%"
+#| fig-cap: "`ausbeer`'s yearly average (blue) against a straight line joining the early- and late-period averages (red)."
+ausbeer_df <- data.frame(time = as.numeric(time(ausbeer)),
+                          value = as.numeric(ausbeer))
+yearly <- aggregate(value ~ floor(time), ausbeer_df, mean)
+names(yearly) <- c("year", "value")
+yearly <- yearly[yearly$year < 2010, ]  # 2010 only has 2 quarters, drop it
 
-TODO
+early <- mean(ausbeer_df$value[ausbeer_df$time < 1961])
+late <- mean(ausbeer_df$value[ausbeer_df$time >= 2005])
+t_early <- mean(ausbeer_df$time[ausbeer_df$time < 1961])
+t_late <- mean(ausbeer_df$time[ausbeer_df$time >= 2005])
+ausbeer_df$line <- early +
+  (late - early) * (ausbeer_df$time - t_early) / (t_late - t_early)
 
-```{r ausbeer-season}
+ggplot(ausbeer_df, aes(time, value)) +
+  geom_line(alpha = 0.5) +
+  geom_line(aes(y = line), color = "red", linetype = "dashed") +
+  geom_line(data = yearly, aes(year + 0.5, value),
+            color = "blue", linewidth = 1) +
+  labs(x = "Time", y = "Megalitres")
+```
+
+## Is there evidence of seasonality? If so, describe the seasonal pattern.
+
+Yes, and it's a strong, regular pattern: every year has the same shape,
+low in Q2 and Q3 and high in Q4, confirmed by the quarter averages
+below. Q4 is clearly the highest quarter and Q2 the lowest.
+
+```{r ausbeer-quarter-means}
+quarter_means <- aggregate(as.numeric(ausbeer) ~ cycle(ausbeer), FUN = mean)
+names(quarter_means) <- c("quarter", "mean")
+quarter_means
+```
+
+@fig-ausbeer-box shows this isn't just an average effect: Q4's box
+sits above Q2's and Q3's with no overlap at all, and only a small
+overlap with Q1's, so Q4 being the high quarter is a consistent,
+year-on-year pattern rather than something driven by a few big years.
+
+```{r fig-ausbeer-box}
+#| out-width: "85%"
+#| fig-cap: "Distribution of `ausbeer` by quarter."
+qdf <- data.frame(quarter = factor(cycle(ausbeer)),
+                   value = as.numeric(ausbeer))
+ggplot(qdf, aes(quarter, value, fill = quarter)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7, show.legend = FALSE) +
+  geom_jitter(width = 0.08, alpha = 0.3, size = 0.6, show.legend = FALSE) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(x = "Quarter", y = "Megalitres")
+```
+
+## Does the variability appear constant over time? Explain what you see in the plot and whether a transformation might be appropriate.
+
+Not really constant, but not in the usual direction. This shows up in
+@fig-ausbeer: the seasonal swings look visibly tighter in the 2000s
+than they did in the 1970s-90s, even though the level in that period
+isn't dramatically different. The breakdown below puts a number on it. The
+variability (measured here as the standard deviation within each
+period) actually *shrinks* over time, even though the level itself goes
+up and then back down:
+
+```{r ausbeer-variance}
+breaks <- c(1955, 1970, 1980, 1990, 2000, 2011)
+labels <- c("1956-70", "1971-80", "1981-90", "1991-2000", "2001-10")
+period <- cut(ausbeer_df$time, breaks = breaks, labels = labels)
+aggregate(value ~ period, data.frame(ausbeer_df, period),
+          function(x) c(mean = mean(x), sd = sd(x)))
+```
+
+The standard deviation doesn't track the mean in any simple way here:
+1971-80 has the highest sd despite a middling mean, and 1981-90 has the
+highest mean despite one of the *lower* sds. The clearest pattern is at
+the far end, where the most recent period's spread (38) is distinctly
+smaller than every earlier period's (54-61), even though its own level
+isn't unusual. The relative variability (sd divided by mean) tells a
+similar story, highest early and lowest late, though not a clean
+monotonic slide in between. Either way, this is not the classic case
+for a log transform, where the size of the fluctuations is supposed to
+grow *with* the level. If anything the opposite shows up at the two
+ends of the series.
+
+## Are there any observations that you would regard as unusual? Identify them and explain why they attract attention.
+
+Two things stand out, of different kinds. The first is structural: the
+whole pre-1975-ish period behaves differently from the rest of the
+series, both in level (much lower) and in relative variability (much
+higher, as shown above). Even the "outlier" points below the whiskers
+in @fig-ausbeer-box are all from 1956-61, so they're this same
+structural thing showing up again rather than scattered noise. This
+same split shows up in @hyndman2018, which restricts to
+`window(ausbeer, start = 1992)` before fitting any forecasting model to
+this dataset, since the earlier decades reflect a different, still
+growing market rather than the more settled pattern seen from the 1990s
+on.
+
+The second is a genuine point-level anomaly: 1981 Q1 comes in at 548,
+well above its neighbouring Q1 values (453-515 across the surrounding
+decade). Comparing every quarter with the average of the same quarter in the
+three years either side (no model involved), it is the largest gap
+anywhere in `ausbeer`: 56 megalitres above its neighbours, about 3.8
+times the typical size of that gap:
+
+```{r ausbeer-local-gap}
+ausbeer_df$quarter <- as.numeric(cycle(ausbeer))
+local_gap <- sapply(seq_len(nrow(ausbeer_df)), function(i) {
+  near <- ausbeer_df$quarter == ausbeer_df$quarter[i] &
+    abs(ausbeer_df$time - ausbeer_df$time[i]) <= 3 &
+    seq_len(nrow(ausbeer_df)) != i
+  if (sum(near) < 4) return(NA)
+  ausbeer_df$value[i] - mean(ausbeer_df$value[near])
+})
+ausbeer_df$time[which.max(abs(local_gap))]
+max(abs(local_gap), na.rm = TRUE) / sd(local_gap, na.rm = TRUE)
+```
+
+## Plot the series by season (for example, using a seasonal plot). What does this reveal that is less obvious in the ordinary time-series plot?
+
+```{r fig-ausbeer-season}
+#| fig-height: 5
+#| out-width: "85%"
+#| fig-format: png
+#| fig-cap: "Seasonal plot of `ausbeer`, one line per year."
 ggseasonplot(ausbeer)
 ```
 
-## Seasonal plot
+@fig-ausbeer-season puts every year on its own line across the four
+quarters. Compared to the ordinary time plot (@fig-ausbeer), this makes
+a few things easier to see:
 
-TODO
+- Almost every year has the same up-down-up shape: climbing to a peak
+  at Q4 without exception, and usually dipping lowest at Q2 (though Q3
+  is the lowest quarter in six of the 54 full years, like 1978 and
+  1990).
+- The lines are stacked in the same order as the trend. The earliest
+  (coolest-coloured) years sit lowest, the lines climb up through the
+  1970s-80s, and the most recent years sit back down again.
+- Comparing the same quarter across different years is much easier
+  here than in the ordinary time plot, where the years are stretched
+  out left to right instead of stacked on top of each other.
+- The 1981 anomaly from section 2.5 is visible here too: its line
+  starts at Q1 clearly above every neighbouring year's line, standing
+  out precisely because the rest of that colour range clusters so
+  tightly together.
 
-```{r ausbeer-subseries}
-ggsubseriesplot(ausbeer)
+## Plot the seasonal subseries. Which quarters have the highest and lowest typical values? Is the seasonal pattern stable over time?
+
+```{r fig-ausbeer-subseries}
+#| out-width: "85%"
+#| fig-format: png
+#| fig-cap: "Seasonal subseries plot of `ausbeer`, one panel per quarter."
+p_subseries <- ggsubseriesplot(ausbeer)
+p_subseries$layers[[1]]$aes_params$colour <- "steelblue"
+p_subseries$layers[[2]]$aes_params$colour <- "red"
+p_subseries + labs(y = "Megalitres")
 ```
 
-## Seasonal subseries plot
+@fig-ausbeer-subseries splits the series into one panel per quarter,
+keeping the years in time order within each panel (unlike the jittered
+points in @fig-ausbeer-box) and marking each quarter's mean in red:
 
-TODO
+- Unlike the boxplot, keeping the time order visible means each panel
+  still traces its own version of the rise-then-plateau-then-decline
+  shape from the trend. So the *level* within a quarter is not stable
+  over time, since the seasonal and trend components aren't independent
+  of when in the series you're looking.
+- It also confirms two things from section 2.3: Q4 has the highest
+  typical value and Q2 the lowest, and the seasonal *pattern* (which
+  quarter is high and which is low) looks stable, not flipping or
+  fading out in any panel.
 
-## Detrend / transform?
+## Would you detrend or transform the series before modelling it? Give a visual argument for your answer. Do not fit a model.
 
-TODO
+Detrending, yes. @fig-ausbeer-resid plots the gap between the raw
+series and the same straight line as in @fig-ausbeer-trend: just two
+averages connected by a line, not a fitted model. If a straight line
+described the trend, the gap would only wobble around zero with the
+seasonal swings. Instead it forms a clear hump: close to zero at the two
+ends, where the line is anchored, then well above zero through the
+1970s-80s (on a yearly average, roughly 100-165 megalitres) before
+coming back down. That's the same rise-plateau-fall shape as the trend
+itself, so a straight line clearly doesn't describe the series, and the
+trend would need to come out before it's modelled as something
+stationary.
+
+```{r fig-ausbeer-resid}
+#| out-width: "85%"
+#| fig-cap: "Gap between `ausbeer` and the straight line in Figure 4."
+ausbeer_df$gap <- ausbeer_df$value - ausbeer_df$line
+
+ggplot(ausbeer_df, aes(time, gap)) +
+  geom_line(color = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Time", y = "Value minus the straight line")
+```
+
+A variance-stabilising transform (log or Box-Cox) is less clearly
+justified. The usual visual argument for a log transform is that spread
+grows with the level, and neither @fig-ausbeer nor the breakdown in
+section 2.4 really show that. The spread bounces around in the 53-61
+range while the mean rises, peaks, and starts to fall, and only drops
+noticeably (to 38) in the very last period. So a log transform doesn't
+have an obvious visual justification here, even though detrending
+clearly does.
+
+\newpage
 
 # References
+
+::: {#refs}
+:::
+
+\newpage
+
+# Appendix: Declaration of AI Use {.unnumbered}
+
+Claude Code was used to help check and improve the R code for both
+exercises, to summarise and search reference material on Monte Carlo
+method applications, to act as a sounding board for discussing ideas,
+and to assist with Quarto/\LaTeX{} typesetting and English language
+polishing. All written interpretations and analytical decisions are my
+own work.
